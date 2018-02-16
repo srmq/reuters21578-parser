@@ -22,7 +22,7 @@ import org.xml.sax.SAXException;
 import org.xml.sax.XMLReader;
 import org.xml.sax.helpers.DefaultHandler;
 
-public class ModapteTestNoShort extends DefaultHandler {
+public class ModapteNoShort extends DefaultHandler {
 	private Map<String, StartElementFunction> startElementFunctions;
 	private Map<String, EndElementFunction> endElementFunctions;
 	
@@ -46,8 +46,15 @@ public class ModapteTestNoShort extends DefaultHandler {
 	
 	private StringBuffer dTopicElement;
 	
-	public ModapteTestNoShort(File outDir) {
+	private boolean produceTrain;
+	
+	private boolean produceTest;
+	
+	public ModapteNoShort(File outDir, boolean produceTrain, boolean produceTest) {
 		this.outputDir = outDir;
+		this.produceTrain = produceTrain;
+		this.produceTest = produceTest;
+		
 		this.startElementFunctions = new HashMap<String, StartElementFunction>();
 		this.startElementFunctions.put("REUTERS", new StartReutersElement());
 		this.startElementFunctions.put("BODY", new StartBodyElement());
@@ -60,6 +67,8 @@ public class ModapteTestNoShort extends DefaultHandler {
 		this.endElementFunctions.put("TOPICS", new EndTopicsElement());
 		this.endElementFunctions.put("D", new EndDElement());
 	}
+	
+	
 	
 	private class EndReutersElement implements EndElementFunction {
 
@@ -158,7 +167,8 @@ public class ModapteTestNoShort extends DefaultHandler {
 				attrValues.put(attrLocalName.toUpperCase(), attrValue);
 			}
 			
-			if(isModapte(attrValues) && isTest(attrValues)) {
+			if (isModapte(attrValues)
+					&& ((produceTest && isTest(attrValues)) || (produceTrain && isTrain(attrValues)))) {
 				newId = getNewId(attrValues);
 			}
 		}
@@ -188,6 +198,17 @@ public class ModapteTestNoShort extends DefaultHandler {
 		final String ret = attrValues.get("NEWID");
 		return ret;
 	}
+	
+	private static boolean isTrain(Map<String, String> attrValues) {
+		boolean ret = false;
+		String lewisSplitType = attrValues.get("LEWISSPLIT");
+		if (lewisSplitType != null && lewisSplitType.equalsIgnoreCase("TRAIN")) {
+			ret = true;
+		}
+		
+		return ret;
+	}
+	
 	
 	private static boolean isTest(Map<String, String> attrValues) {
 		boolean ret = false;
@@ -259,7 +280,7 @@ public class ModapteTestNoShort extends DefaultHandler {
 		//first argument should be directory with xml files
 		//second argument should be output directory
 		if (args.length < 2) {
-			throw new IllegalArgumentException("first argument should be directory with xml files; second argument should be output directory");
+			throw new IllegalArgumentException("first argument should be directory with xml files; second argument should be output directory; third (optional argument) should be test, train, or all (default is test for no third argument)");
 		}
 		File inputDir = new File(args[0]);
 		if (inputDir == null || !inputDir.isDirectory()) {
@@ -275,6 +296,20 @@ public class ModapteTestNoShort extends DefaultHandler {
 		if (!outputDir.canWrite()) {
 			throw new IllegalArgumentException("Output directory is not writable");
 		}
+		boolean produceTest = true;
+		boolean produceTrain = false;
+		if (args.length == 3) {
+			if (args[2].equalsIgnoreCase("test")) {
+				produceTest = true;
+				produceTrain = false;
+			} else if (args[2].equalsIgnoreCase("train")) {
+				produceTest = false;
+				produceTrain = true;
+			} else if (args[2].equalsIgnoreCase("all")) {
+				produceTest = true;
+				produceTrain = true;
+			}
+		}
 			
 		File[] inputFiles = inputDir.listFiles();
 		SAXParserFactory saxFactory = SAXParserFactory.newInstance();
@@ -283,7 +318,7 @@ public class ModapteTestNoShort extends DefaultHandler {
 		SAXParser saxParser = saxFactory.newSAXParser();
 		XMLReader xmlReader = saxParser.getXMLReader();
 		xmlReader.setErrorHandler(new SimpleErrorHandler(System.err));
-		xmlReader.setContentHandler(new ModapteTestNoShort(outputDir));
+		xmlReader.setContentHandler(new ModapteNoShort(outputDir, produceTrain, produceTest));
 		for (File file : inputFiles) {
 			if (file.toString().toLowerCase().endsWith(".xml")) {
 				BufferedInputStream bufStream = new BufferedInputStream(new FileInputStream(file));
